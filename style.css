@@ -198,7 +198,7 @@ main {
     font-size: 0.75rem;
     font-weight: 700;
     background: var(--accent-color);
-    color: white;
+    color: white !important;
     padding: 2px 8px;
     border-radius: 10px;
     min-width: 30px;
