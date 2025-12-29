@@ -16,10 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
         images: [],
         lines: [],
         canvasHeight: 1080,
-        borderRadius: 5, // Fixed to 5px
+        borderRadius: 20, // Updated to 20px
         borderThickness: 0,
         borderColor: '#000000',
-        globalSize: 300,
+        globalSize: 600, // Updated to 600
         overrideSize: false,
         lineThickness: 2,
         lineColor: '#888888',
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function applyImageStyles(img) {
-        const borderRadius = 5; // Fixed 5px
+        const borderRadius = state.borderRadius;
         const rect = new fabric.Rect({
             width: img.width,
             height: img.height,
@@ -131,6 +131,19 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.requestRenderAll();
     }
 
+    function constrainObject(obj) {
+        const overflowLimit = state.canvasHeight * 0.03;
+        const minTop = -overflowLimit;
+        const maxTop = state.canvasHeight - (obj.height * obj.scaleY) + overflowLimit;
+
+        // Vertical constraint
+        if (obj.top < minTop) obj.top = minTop;
+        if (obj.top > maxTop) obj.top = maxTop;
+
+        // Horizontal constraint (cannot go left of 0)
+        if (obj.left < 0) obj.left = 0;
+    }
+
     // --- Event Listeners ---
 
     // Initial Zoom
@@ -182,6 +195,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Horizontal Scroll with Wheel
+    const canvasContainer = document.getElementById('canvas-container');
+    if (canvasContainer) {
+        canvasContainer.addEventListener('wheel', (e) => {
+            if (e.deltaY !== 0) {
+                canvasContainer.scrollLeft += e.deltaY;
+                e.preventDefault();
+            }
+        }, { passive: false });
+    }
+
     // Image Upload
     const imageUpload = document.getElementById('image-upload');
     if (imageUpload) {
@@ -211,7 +235,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             imageDataList.sort((a, b) => a.timestamp - b.timestamp);
 
-            // Start from the right edge of the last image, or 0 if no images exist
             let currentX = 0;
             if (state.images.length > 0) {
                 let maxX = 0;
@@ -224,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             for (let i = 0; i < imageDataList.length; i++) {
                 const data = imageDataList[i];
-                const targetX = currentX; // Capture currentX for this specific image
+                const targetX = currentX;
 
                 fabric.Image.fromURL(data.src, (img) => {
                     const scale = state.globalSize / Math.max(img.width, img.height);
@@ -264,8 +287,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Border Thickness
-    document.getElementById('border-thickness').addEventListener('input', (e) => {
+    const borderThicknessInput = document.getElementById('border-thickness');
+    const borderThicknessVal = document.getElementById('border-thickness-val');
+    borderThicknessInput.addEventListener('input', (e) => {
         state.borderThickness = parseInt(e.target.value);
+        if (borderThicknessVal) borderThicknessVal.textContent = state.borderThickness;
         state.images.forEach(img => applyImageStyles(img));
         canvas.requestRenderAll();
     });
@@ -278,8 +304,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Global Size
-    document.getElementById('global-size').addEventListener('input', (e) => {
+    const globalSizeInput = document.getElementById('global-size');
+    const globalSizeVal = document.getElementById('global-size-val');
+    globalSizeInput.addEventListener('input', (e) => {
         state.globalSize = parseInt(e.target.value);
+        if (globalSizeVal) globalSizeVal.textContent = state.globalSize;
         if (state.overrideSize) {
             state.images.forEach(img => {
                 const scale = state.globalSize / Math.max(img.width, img.height);
@@ -297,8 +326,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Line Settings
-    document.getElementById('line-thickness').addEventListener('input', (e) => {
+    const lineThicknessInput = document.getElementById('line-thickness');
+    const lineThicknessVal = document.getElementById('line-thickness-val');
+    lineThicknessInput.addEventListener('input', (e) => {
         state.lineThickness = parseInt(e.target.value);
+        if (lineThicknessVal) lineThicknessVal.textContent = state.lineThickness;
         updateLines();
     });
     document.getElementById('line-color').addEventListener('input', (e) => {
@@ -314,10 +346,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('shuffle-btn').addEventListener('click', () => {
         const totalWidth = calculateTotalWidth();
         state.images.forEach(img => {
+            const newLeft = Math.random() * (totalWidth - (img.width * img.scaleX));
             img.set({
-                left: Math.random() * (totalWidth - 200),
-                top: Math.random() * (state.canvasHeight - 200)
+                left: Math.max(0, newLeft),
+                top: Math.random() * (state.canvasHeight - (img.height * img.scaleY))
             });
+            constrainObject(img);
             img.setCoords();
         });
         updateCanvasWidth();
@@ -379,11 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.on('object:moving', (options) => {
         const obj = options.target;
         if (obj.type !== 'image') return;
-        const overflowLimit = state.canvasHeight * 0.03;
-        const minTop = -overflowLimit;
-        const maxTop = state.canvasHeight - (obj.height * obj.scaleY) + overflowLimit;
-        if (obj.top < minTop) obj.top = minTop;
-        if (obj.top > maxTop) obj.top = maxTop;
+        constrainObject(obj);
         updateCanvasWidth();
         updateLines();
     });

@@ -21,7 +21,7 @@
 <body>
     <div id="app">
         <header>
-            <div class="logo">perpetuity</div>
+            <div class="logo">perpetuity <span class="value-badge">upd 2</span></div>
             <div class="header-actions">
                 <button id="theme-toggle" class="icon-btn" aria-label="Toggle Theme">
                     <span class="icon-sun">☀️</span>
@@ -61,7 +61,10 @@
                     <section class="control-group">
                         <h3>Global Image Settings</h3>
                         <div class="control-item">
-                            <label for="border-thickness">Border Thickness</label>
+                            <div class="label-row">
+                                <label for="border-thickness">Border Thickness</label>
+                                <span id="border-thickness-val" class="value-badge">0</span>
+                            </div>
                             <input type="range" id="border-thickness" min="0" max="50" value="0">
                         </div>
                         <div class="control-item">
@@ -69,8 +72,11 @@
                             <input type="color" id="border-color" value="#000000">
                         </div>
                         <div class="control-item">
-                            <label for="global-size">Global Size</label>
-                            <input type="range" id="global-size" min="100" max="1000" value="300">
+                            <div class="label-row">
+                                <label for="global-size">Global Size</label>
+                                <span id="global-size-val" class="value-badge">600</span>
+                            </div>
+                            <input type="range" id="global-size" min="100" max="1000" value="600">
                         </div>
                         <div class="control-item checkbox">
                             <input type="checkbox" id="override-size">
@@ -81,7 +87,10 @@
                     <section class="control-group">
                         <h3>Spider Web Lines</h3>
                         <div class="control-item">
-                            <label for="line-thickness">Line Thickness</label>
+                            <div class="label-row">
+                                <label for="line-thickness">Line Thickness</label>
+                                <span id="line-thickness-val" class="value-badge">2</span>
+                            </div>
                             <input type="range" id="line-thickness" min="0" max="20" value="2">
                         </div>
                         <div class="control-item">
