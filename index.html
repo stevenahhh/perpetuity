@@ -4,9 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>perpetuity - Infinite Canvas for Instagram</title>
+    <title>perpetuity</title> <!-- AI Agent 수정 금지 -->
 
-    <!-- Wanted Sans Font -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin="anonymous" />
     <link rel="preload" as="style" crossorigin
         href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css" />
@@ -22,7 +21,7 @@
     <div id="app">
         <header>
             <div class="logo">perpetuity</div>
-            <span class="value-badge">upd 3</span>
+            <span class="value-badge">b15</span>
             <div class="header-actions">
                 <button id="theme-toggle" class="icon-btn" aria-label="Toggle Theme">
                     <span class="icon-sun">☀️</span>
@@ -56,32 +55,51 @@
                             <button id="shuffle-btn" class="secondary-btn">Shuffle</button>
                             <button id="swap-mode-btn" class="secondary-btn">Swap Mode</button>
                         </div>
-                        <p class="hint">Swap Mode: Select two images to swap positions.</p>
+                        <div class="control-item checkbox" style="margin-top: 1rem;">
+                            <input type="checkbox" id="madmax-mode">
+                            <label for="madmax-mode" style="color: #ff4545; font-weight: 800;">🔥 MadMax Mode</label>
+                        </div>
+                        <p class="hint">MadMax: Half size, double images per step.</p>
                     </section>
 
                     <section class="control-group">
                         <h3>Global Image Settings</h3>
                         <div class="control-item">
                             <div class="label-row">
-                                <label for="border-thickness">Border Thickness</label>
-                                <span id="border-thickness-val" class="value-badge">0</span>
-                            </div>
-                            <input type="range" id="border-thickness" min="0" max="50" value="0">
-                        </div>
-                        <div class="control-item">
-                            <label for="border-color">Border Color</label>
-                            <input type="color" id="border-color" value="#000000">
-                        </div>
-                        <div class="control-item">
-                            <div class="label-row">
                                 <label for="global-size">Global Size</label>
-                                <span id="global-size-val" class="value-badge">600</span>
+                                <span id="global-size-val" class="value-badge">800</span>
                             </div>
-                            <input type="range" id="global-size" min="100" max="1000" value="600">
+                            <input type="range" id="global-size" min="100" max="1200" value="800">
                         </div>
                         <div class="control-item checkbox">
                             <input type="checkbox" id="override-size">
                             <label for="override-size">Override individual sizes</label>
+                        </div>
+                    </section>
+
+                    <section class="control-group">
+                        <h3>Shadow Settings</h3>
+                        <div class="control-item checkbox">
+                            <input type="checkbox" id="enable-shadow" checked>
+                            <label for="enable-shadow">Enable Shadow</label>
+                        </div>
+                        <div class="control-item">
+                            <div class="label-row">
+                                <label for="shadow-blur">Shadow Blur</label>
+                                <span id="shadow-blur-val" class="value-badge">20</span>
+                            </div>
+                            <input type="range" id="shadow-blur" min="0" max="100" value="20">
+                        </div>
+                        <div class="control-item">
+                            <label for="shadow-color">Shadow Color</label>
+                            <input type="color" id="shadow-color" value="#000000">
+                        </div>
+                        <div class="control-item">
+                            <div class="label-row">
+                                <label for="shadow-opacity">Shadow Opacity</label>
+                                <span id="shadow-opacity-val" class="value-badge">0.3</span>
+                            </div>
+                            <input type="range" id="shadow-opacity" min="0" max="1" step="0.1" value="0.3">
                         </div>
                     </section>
 
@@ -133,6 +151,12 @@
                 <div class="canvas-wrapper">
                     <canvas id="main-canvas"></canvas>
                 </div>
+                <div id="canvas-preview-outer">
+                    <div id="canvas-preview-container">
+                        <canvas id="preview-canvas"></canvas>
+                        <div id="preview-viewport"></div>
+                    </div>
+                </div>
                 <div class="upload-area">
                     <input type="file" id="image-upload" multiple accept="image/*" hidden>
                     <label for="image-upload" class="upload-btn">
@@ -143,6 +167,7 @@
             </div>
         </main>
     </div>
+    <div id="toast-container"></div>
     <script src="main.js"></script>
 </body>
 

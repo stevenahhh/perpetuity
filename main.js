@@ -9,24 +9,29 @@ document.addEventListener('DOMContentLoaded', () => {
         height: 1080,
         backgroundColor: '#ffffff',
         preserveObjectStacking: true,
-        renderOnAddRemove: false // Performance: manual rendering
+        renderOnAddRemove: false, // Performance: manual rendering
+        selection: false // Disable box selection
     });
 
     const state = {
         images: [],
         lines: [],
         canvasHeight: 1080,
-        borderRadius: 20, // Updated to 20px
-        borderThickness: 0,
-        borderColor: '#000000',
-        globalSize: 600, // Updated to 600
+        borderRadius: 20,
+        globalSize: 650,
         overrideSize: false,
         lineThickness: 2,
         lineColor: '#888888',
         lineLayer: 'below',
         zoom: 0.5,
         swapMode: false,
-        selectedForSwap: null
+        selectedForSwap: null,
+        enableShadow: true,
+        shadowBlur: 20,
+        shadowColor: '#000000',
+        shadowOpacity: 0.3,
+        madMaxMode: false,
+        uploadedFileHashes: new Set()
     };
 
     // --- Helper Functions ---
@@ -62,10 +67,123 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateCanvasWidth() {
         applyZoom(state.zoom);
+        updatePreview();
         canvas.requestRenderAll();
     }
 
-    function applyImageStyles(img) {
+    function updatePreview() {
+        const previewOuter = document.getElementById('canvas-preview-outer');
+        if (state.images.length === 0) {
+            previewOuter.style.display = 'none';
+            return;
+        }
+        previewOuter.style.display = 'block';
+
+        const previewCanvas = document.getElementById('preview-canvas');
+        const ctx = previewCanvas.getContext('2d');
+        const totalWidth = calculateTotalWidth();
+
+        // Set internal resolution
+        previewCanvas.width = totalWidth / 10;
+        previewCanvas.height = state.canvasHeight / 10;
+
+        ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        ctx.fillStyle = canvas.backgroundColor || '#ffffff';
+        ctx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+        state.images.forEach(img => {
+            ctx.save();
+            ctx.translate(img.left / 10, img.top / 10);
+            ctx.scale(img.scaleX / 10, img.scaleY / 10);
+            // Draw a simple placeholder for performance
+            ctx.fillStyle = '#888888';
+            ctx.globalAlpha = 0.5;
+            ctx.fillRect(0, 0, img.width, img.height);
+            ctx.restore();
+        });
+
+        updatePreviewViewport();
+    }
+
+    function updatePreviewViewport() {
+        const container = document.getElementById('canvas-container');
+        const viewport = document.getElementById('preview-viewport');
+        const totalWidth = calculateTotalWidth() * state.zoom;
+
+        if (totalWidth === 0) return;
+
+        const visibleWidth = container.clientWidth;
+        const scrollLeft = container.scrollLeft;
+
+        const widthPercent = (visibleWidth / totalWidth) * 100;
+        const leftPercent = (scrollLeft / totalWidth) * 100;
+
+        viewport.style.width = `${Math.min(100, widthPercent)}%`;
+        viewport.style.left = `${Math.min(100, leftPercent)}%`;
+    }
+
+    function findBestPosition(imgWidth, imgHeight, scale) {
+        const h = imgHeight * scale;
+        const lastImg = state.images[state.images.length - 1];
+        const secondLastImg = state.images[state.images.length - 2];
+
+        // Vertical margin: 10%
+        const margin = state.canvasHeight * 0.10;
+        const minTop = -margin;
+        const maxTop = state.canvasHeight - h + margin;
+
+        // If it's the first image, start at 100px padding
+        if (!lastImg) {
+            return {
+                left: 100,
+                top: minTop + Math.random() * (maxTop - minTop)
+            };
+        }
+
+        // Horizontal step: 250px-400px
+        // In MadMax mode, we might want slightly tighter steps for the pairs
+        let step = 250 + Math.random() * 150;
+
+        if (state.madMaxMode) {
+            // If this is the second image of a pair (odd index in state.images),
+            // place it very close to the last one horizontally but different vertically
+            if (state.images.length % 2 !== 0) {
+                step = Math.random() * 100; // Small horizontal offset for the pair
+            } else {
+                step = 300 + Math.random() * 200; // Larger step between pairs
+            }
+        }
+
+        // Vertical placement: Stricter pattern prevention
+        let newTop;
+        let attempts = 0;
+        const minVerticalDist = state.madMaxMode ? 100 : 200;
+
+        do {
+            newTop = minTop + Math.random() * (maxTop - minTop);
+            attempts++;
+
+            const distToLast = Math.abs(newTop - lastImg.top);
+
+            let isZigZag = false;
+            if (secondLastImg && !state.madMaxMode) {
+                const lastDir = lastImg.top - secondLastImg.top;
+                const currentDir = newTop - lastImg.top;
+                if ((lastDir > 0 && currentDir < 0) || (lastDir < 0 && currentDir > 0)) {
+                    if (Math.abs(Math.abs(lastDir) - Math.abs(currentDir)) < 100) {
+                        isZigZag = true;
+                    }
+                }
+            }
+
+            if (distToLast > minVerticalDist && !isZigZag) break;
+        } while (attempts < 15);
+
+        return {
+            left: lastImg.left + step,
+            top: newTop
+        };
+    } function applyImageStyles(img) {
         const borderRadius = state.borderRadius;
         const rect = new fabric.Rect({
             width: img.width,
@@ -75,12 +193,34 @@ document.addEventListener('DOMContentLoaded', () => {
             left: -img.width / 2,
             top: -img.height / 2
         });
+
+        const shadow = state.enableShadow ? new fabric.Shadow({
+            color: state.shadowColor + Math.round(state.shadowOpacity * 255).toString(16).padStart(2, '0'),
+            blur: state.shadowBlur,
+            offsetX: 0,
+            offsetY: 0
+        }) : null;
+
         img.set({
             clipPath: rect,
-            stroke: state.borderColor,
-            strokeWidth: state.borderThickness / img.scaleX,
-            strokeUniform: true
+            shadow: shadow,
+            stroke: null,
+            strokeWidth: 0
         });
+    }
+
+    function showToast(message) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    async function getFileHash(file) {
+        // Simple hash based on name, size and last modified
+        return `${file.name}-${file.size}-${file.lastModified}`;
     }
 
     async function optimizeImage(dataUrl, maxWidth = 2000) {
@@ -132,7 +272,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function constrainObject(obj) {
-        const overflowLimit = state.canvasHeight * 0.03;
+        // Reduced margin: only 5% of canvas height to keep images mostly inside
+        const overflowLimit = state.canvasHeight * 0.05;
         const minTop = -overflowLimit;
         const maxTop = state.canvasHeight - (obj.height * obj.scaleY) + overflowLimit;
 
@@ -140,8 +281,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (obj.top < minTop) obj.top = minTop;
         if (obj.top > maxTop) obj.top = maxTop;
 
-        // Horizontal constraint (cannot go left of 0)
-        if (obj.left < 0) obj.left = 0;
+        // Horizontal constraint (100px padding on the left)
+        if (obj.left < 100) obj.left = 100;
     }
 
     // --- Event Listeners ---
@@ -200,10 +341,69 @@ document.addEventListener('DOMContentLoaded', () => {
     if (canvasContainer) {
         canvasContainer.addEventListener('wheel', (e) => {
             if (e.deltaY !== 0) {
-                canvasContainer.scrollLeft += e.deltaY;
+                // Increased scroll speed (multiplier: 2.5)
+                canvasContainer.scrollLeft += e.deltaY * 2.5;
+                updatePreviewViewport();
                 e.preventDefault();
             }
         }, { passive: false });
+
+        canvasContainer.addEventListener('scroll', updatePreviewViewport);
+    }
+
+    // Preview Click/Drag to Scroll
+    const previewContainer = document.getElementById('canvas-preview-container');
+    if (previewContainer) {
+        const handlePreviewInteraction = (e) => {
+            const rect = previewContainer.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            if (clientX === undefined) return;
+
+            const x = clientX - rect.left;
+            const totalWidth = calculateTotalWidth() * state.zoom;
+            const visibleWidth = canvasContainer.clientWidth;
+
+            // Calculate the percentage of the click relative to the track
+            // We want the thumb to be centered on the mouse, but constrained
+            const thumbWidth = (visibleWidth / totalWidth) * rect.width;
+            const scrollPercent = (x - thumbWidth / 2) / (rect.width - thumbWidth);
+
+            canvasContainer.scrollLeft = scrollPercent * (totalWidth - visibleWidth);
+            updatePreviewViewport();
+        };
+
+        previewContainer.addEventListener('mousedown', (e) => {
+            state.isPreviewDragging = true;
+            handlePreviewInteraction(e);
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (state.isPreviewDragging) {
+                handlePreviewInteraction(e);
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            state.isPreviewDragging = false;
+        });
+
+        // Touch support
+        previewContainer.addEventListener('touchstart', (e) => {
+            state.isPreviewDragging = true;
+            handlePreviewInteraction(e);
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            if (state.isPreviewDragging) {
+                handlePreviewInteraction(e);
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => {
+            state.isPreviewDragging = false;
+        });
     }
 
     // Image Upload
@@ -212,8 +412,16 @@ document.addEventListener('DOMContentLoaded', () => {
         imageUpload.addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
             const imageDataList = [];
+            let duplicateCount = 0;
 
             for (const file of files) {
+                const hash = await getFileHash(file);
+                if (state.uploadedFileHashes.has(hash)) {
+                    duplicateCount++;
+                    continue;
+                }
+                state.uploadedFileHashes.add(hash);
+
                 const data = await new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.onload = async (f) => {
@@ -233,33 +441,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 imageDataList.push(data);
             }
 
-            imageDataList.sort((a, b) => a.timestamp - b.timestamp);
-
-            let currentX = 0;
-            if (state.images.length > 0) {
-                let maxX = 0;
-                state.images.forEach(img => {
-                    const rightEdge = img.left + (img.width * img.scaleX);
-                    if (rightEdge > maxX) maxX = rightEdge;
-                });
-                currentX = maxX + 200 + Math.random() * 200;
+            if (duplicateCount > 0) {
+                showToast(`${duplicateCount}개의 중복된 이미지가 제외되었습니다.`);
             }
+
+            if (imageDataList.length === 0) return;
+
+            imageDataList.sort((a, b) => a.timestamp - b.timestamp);
 
             for (let i = 0; i < imageDataList.length; i++) {
                 const data = imageDataList[i];
-                const targetX = currentX;
 
                 fabric.Image.fromURL(data.src, (img) => {
                     const scale = state.globalSize / Math.max(img.width, img.height);
-                    const randomLeft = targetX;
-                    const overflowLimit = state.canvasHeight * 0.03;
-                    const minTop = -overflowLimit;
-                    const maxTop = state.canvasHeight - (img.height * scale) + overflowLimit;
-                    const randomTop = minTop + Math.random() * (maxTop - minTop);
+                    const pos = findBestPosition(img.width, img.height, scale);
 
                     img.set({
-                        left: randomLeft,
-                        top: randomTop,
+                        left: pos.left,
+                        top: pos.top,
                         scaleX: scale,
                         scaleY: scale,
                         cornerStyle: 'circle',
@@ -279,30 +478,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateCanvasWidth();
                     updateLines();
                 });
-
-                currentX += 200 + Math.random() * 200;
             }
             canvas.requestRenderAll();
         });
     }
 
-    // Border Thickness
-    const borderThicknessInput = document.getElementById('border-thickness');
-    const borderThicknessVal = document.getElementById('border-thickness-val');
-    borderThicknessInput.addEventListener('input', (e) => {
-        state.borderThickness = parseInt(e.target.value);
-        if (borderThicknessVal) borderThicknessVal.textContent = state.borderThickness;
-        state.images.forEach(img => applyImageStyles(img));
-        canvas.requestRenderAll();
-    });
-
-    // Border Color
-    document.getElementById('border-color').addEventListener('input', (e) => {
-        state.borderColor = e.target.value;
-        state.images.forEach(img => applyImageStyles(img));
-        canvas.requestRenderAll();
-    });
-
+    // Border Thickness 제거됨 (Shadow로 대체)
     // Global Size
     const globalSizeInput = document.getElementById('global-size');
     const globalSizeVal = document.getElementById('global-size-val');
@@ -319,6 +500,35 @@ document.addEventListener('DOMContentLoaded', () => {
             canvas.requestRenderAll();
         }
     });
+
+    // MadMax Mode
+    const madMaxToggle = document.getElementById('madmax-mode');
+    if (madMaxToggle) {
+        madMaxToggle.addEventListener('change', (e) => {
+            state.madMaxMode = e.target.checked;
+
+            if (state.madMaxMode) {
+                state.globalSize = Math.round(state.globalSize / 2);
+            } else {
+                state.globalSize = state.globalSize * 2;
+            }
+
+            // Update UI
+            globalSizeInput.value = state.globalSize;
+            if (globalSizeVal) globalSizeVal.textContent = state.globalSize;
+
+            // Apply to existing images if override is on
+            if (state.overrideSize) {
+                state.images.forEach(img => {
+                    const scale = state.globalSize / Math.max(img.width, img.height);
+                    img.set({ scaleX: scale, scaleY: scale });
+                    applyImageStyles(img);
+                });
+                updateLines();
+                canvas.requestRenderAll();
+            }
+        });
+    }
 
     // Override Size
     document.getElementById('override-size').addEventListener('change', (e) => {
@@ -342,24 +552,68 @@ document.addEventListener('DOMContentLoaded', () => {
         updateLines();
     });
 
+    // Shadow Settings
+    const enableShadowInput = document.getElementById('enable-shadow');
+    if (enableShadowInput) {
+        enableShadowInput.addEventListener('change', (e) => {
+            state.enableShadow = e.target.checked;
+            state.images.forEach(img => applyImageStyles(img));
+            canvas.requestRenderAll();
+        });
+    }
+
+    const shadowBlurInput = document.getElementById('shadow-blur');
+    const shadowBlurVal = document.getElementById('shadow-blur-val');
+    if (shadowBlurInput) {
+        shadowBlurInput.addEventListener('input', (e) => {
+            state.shadowBlur = parseInt(e.target.value);
+            if (shadowBlurVal) shadowBlurVal.textContent = state.shadowBlur;
+            state.images.forEach(img => applyImageStyles(img));
+            canvas.requestRenderAll();
+        });
+    }
+
+    const shadowColorInput = document.getElementById('shadow-color');
+    if (shadowColorInput) {
+        shadowColorInput.addEventListener('input', (e) => {
+            state.shadowColor = e.target.value;
+            state.images.forEach(img => applyImageStyles(img));
+            canvas.requestRenderAll();
+        });
+    }
+
+    const shadowOpacityInput = document.getElementById('shadow-opacity');
+    const shadowOpacityVal = document.getElementById('shadow-opacity-val');
+    if (shadowOpacityInput) {
+        shadowOpacityInput.addEventListener('input', (e) => {
+            state.shadowOpacity = parseFloat(e.target.value);
+            if (shadowOpacityVal) shadowOpacityVal.textContent = state.shadowOpacity;
+            state.images.forEach(img => applyImageStyles(img));
+            canvas.requestRenderAll();
+        });
+    }
+
     // Shuffle
     document.getElementById('shuffle-btn').addEventListener('click', () => {
         const totalWidth = calculateTotalWidth();
         state.images.forEach(img => {
-            const newLeft = Math.random() * (totalWidth - (img.width * img.scaleX));
+            const newLeft = 100 + Math.random() * (totalWidth - 200 - (img.width * img.scaleX));
+            const margin = state.canvasHeight * 0.05;
+            const newTop = -margin + Math.random() * (state.canvasHeight + margin * 2 - (img.height * img.scaleY));
+
             img.set({
-                left: Math.max(0, newLeft),
-                top: Math.random() * (state.canvasHeight - (img.height * img.scaleY))
+                left: Math.max(100, newLeft),
+                top: newTop
             });
             constrainObject(img);
             img.setCoords();
         });
+
         updateCanvasWidth();
         updateLines();
+        updatePreview();
         canvas.requestRenderAll();
-    });
-
-    // Swap Mode
+    });    // Swap Mode
     const swapBtn = document.getElementById('swap-mode-btn');
     if (swapBtn) {
         swapBtn.addEventListener('click', () => {
@@ -376,8 +630,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state.swapMode || !options.target || options.target.type !== 'image') {
             if (state.swapMode && (!options.target || options.target.type !== 'image')) {
                 if (state.selectedForSwap) {
-                    state.selectedForSwap.set('stroke', state.borderColor);
-                    state.selectedForSwap.set('strokeWidth', state.borderThickness / state.selectedForSwap.scaleX);
+                    state.selectedForSwap.set('stroke', null);
+                    state.selectedForSwap.set('strokeWidth', 0);
                     state.selectedForSwap = null;
                     canvas.requestRenderAll();
                 }
@@ -391,8 +645,8 @@ document.addEventListener('DOMContentLoaded', () => {
             clickedImg.set('strokeWidth', 5 / clickedImg.scaleX);
             canvas.requestRenderAll();
         } else if (state.selectedForSwap === clickedImg) {
-            clickedImg.set('stroke', state.borderColor);
-            clickedImg.set('strokeWidth', state.borderThickness / clickedImg.scaleX);
+            clickedImg.set('stroke', null);
+            clickedImg.set('strokeWidth', 0);
             state.selectedForSwap = null;
             canvas.requestRenderAll();
         } else {
@@ -402,8 +656,8 @@ document.addEventListener('DOMContentLoaded', () => {
             state.selectedForSwap.set({ left: tempLeft, top: tempTop });
             clickedImg.setCoords();
             state.selectedForSwap.setCoords();
-            state.selectedForSwap.set('stroke', state.borderColor);
-            state.selectedForSwap.set('strokeWidth', state.borderThickness / state.selectedForSwap.scaleX);
+            state.selectedForSwap.set('stroke', null);
+            state.selectedForSwap.set('strokeWidth', 0);
             state.selectedForSwap = null;
             updateLines();
             canvas.requestRenderAll();
@@ -416,11 +670,13 @@ document.addEventListener('DOMContentLoaded', () => {
         constrainObject(obj);
         updateCanvasWidth();
         updateLines();
+        updatePreview();
     });
 
     canvas.on('object:scaling', (options) => {
         applyImageStyles(options.target);
         updateLines();
+        updatePreview();
     });
 
     // Export
