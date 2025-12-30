@@ -141,23 +141,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Horizontal step: 250px-400px
-        // In MadMax mode, we reduce the step by half to maintain density with smaller images
+        // In MadMax mode, we use a much smaller step to fit ~7 images per 1080px
         let step = 250 + Math.random() * 150;
 
         if (state.madMaxMode) {
-            // If this is the second image of a pair (odd index in state.images),
-            // place it very close to the last one horizontally but different vertically
-            if (state.images.length % 2 !== 0) {
-                step = Math.random() * 50; // Reduced from 100
-            } else {
-                step = 150 + Math.random() * 100; // Reduced from 300-500 (halved)
-            }
+            step = 120 + Math.random() * 60; // Average 150px step -> ~7 images per 1080px
         }
 
         // Vertical placement: Stricter pattern prevention
         let newTop;
         let attempts = 0;
-        const minVerticalDist = state.madMaxMode ? 100 : 200;
+        // Loosen vertical distance for MadMax to allow more density
+        const minVerticalDist = state.madMaxMode ? 50 : 200;
 
         do {
             newTop = minTop + Math.random() * (maxTop - minTop);
@@ -507,16 +502,6 @@ document.addEventListener('DOMContentLoaded', () => {
         madMaxToggle.addEventListener('change', (e) => {
             state.madMaxMode = e.target.checked;
 
-            if (state.madMaxMode) {
-                state.globalSize = Math.round(state.globalSize / 2);
-            } else {
-                state.globalSize = state.globalSize * 2;
-            }
-
-            // Update UI
-            globalSizeInput.value = state.globalSize;
-            if (globalSizeVal) globalSizeVal.textContent = state.globalSize;
-
             // Apply to existing images if override is on
             if (state.overrideSize) {
                 state.images.forEach(img => {
@@ -528,9 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 canvas.requestRenderAll();
             }
         });
-    }
-
-    // Override Size
+    }    // Override Size
     document.getElementById('override-size').addEventListener('change', (e) => {
         state.overrideSize = e.target.checked;
     });
