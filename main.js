@@ -141,16 +141,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Horizontal step: 250px-400px
-        // In MadMax mode, we might want slightly tighter steps for the pairs
+        // In MadMax mode, we reduce the step by half to maintain density with smaller images
         let step = 250 + Math.random() * 150;
 
         if (state.madMaxMode) {
             // If this is the second image of a pair (odd index in state.images),
             // place it very close to the last one horizontally but different vertically
             if (state.images.length % 2 !== 0) {
-                step = Math.random() * 100; // Small horizontal offset for the pair
+                step = Math.random() * 50; // Reduced from 100
             } else {
-                step = 300 + Math.random() * 200; // Larger step between pairs
+                step = 150 + Math.random() * 100; // Reduced from 300-500 (halved)
             }
         }
 
@@ -598,7 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalWidth = calculateTotalWidth();
         state.images.forEach(img => {
             const newLeft = 100 + Math.random() * (totalWidth - 200 - (img.width * img.scaleX));
-            const margin = state.canvasHeight * 0.05;
+            const margin = state.canvasHeight * 0.10; // Updated to 10% to match findBestPosition
             const newTop = -margin + Math.random() * (state.canvasHeight + margin * 2 - (img.height * img.scaleY));
 
             img.set({
