@@ -689,4 +689,23 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.setZoom(originalZoom);
         canvas.requestRenderAll();
     });
+
+    // Tutorial Logic
+    const tutorialOverlay = document.getElementById('tutorial-overlay');
+    const closeTutorialBtn = document.getElementById('close-tutorial');
+
+    if (tutorialOverlay && closeTutorialBtn) {
+        const hasSeenTutorial = localStorage.getItem('perpetuity-tutorial-seen');
+
+        if (!hasSeenTutorial) {
+            setTimeout(() => {
+                tutorialOverlay.classList.add('show');
+            }, 500);
+        }
+
+        closeTutorialBtn.addEventListener('click', () => {
+            tutorialOverlay.classList.remove('show');
+            localStorage.setItem('perpetuity-tutorial-seen', 'true');
+        });
+    }
 });

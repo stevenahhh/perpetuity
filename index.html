@@ -21,7 +21,7 @@
     <div id="app">
         <header>
             <div class="logo">perpetuity</div>
-            <span class="value-badge">b15</span>
+            <span class="value-badge">update 23</span>
             <div class="header-actions">
                 <button id="theme-toggle" class="icon-btn" aria-label="Toggle Theme">
                     <span class="icon-sun">☀️</span>
@@ -168,6 +168,39 @@
         </main>
     </div>
     <div id="toast-container"></div>
+
+    <!-- Tutorial Overlay -->
+    <div id="tutorial-overlay" class="tutorial-overlay">
+        <div class="tutorial-content glass">
+            <h2>Welcome to perpetuity</h2>
+            <div class="tutorial-steps">
+                <div class="step">
+                    <span class="step-icon">🖼️</span>
+                    <div class="step-text">
+                        <strong>캔버스 조작</strong>
+                        <p>사진을 드래그하여 위치를 옮기거나, 모서리를 잡아 크기를 조절할 수 있습니다.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <span class="step-icon">⚙️</span>
+                    <div class="step-text">
+                        <strong>설정 커스텀</strong>
+                        <p class="pc-only">왼쪽 사이드바에서 출력물의 크기, 디자인, 그림자 등을 자유롭게 조정하세요.</p>
+                        <p class="mobile-only">상단 메뉴 버튼(☰)을 눌러 출력물의 크기, 디자인 등을 조정할 수 있습니다.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <span class="step-icon">➕</span>
+                    <div class="step-text">
+                        <strong>이미지 추가</strong>
+                        <p>하단의 'Upload Images' 버튼을 눌러 새로운 사진들을 추가하세요.</p>
+                    </div>
+                </div>
+            </div>
+            <button id="close-tutorial" class="primary-btn">시작하기</button>
+        </div>
+    </div>
+
     <script src="main.js"></script>
 </body>
 
