@@ -66,6 +66,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateCanvasWidth() {
+        const totalWidth = calculateTotalWidth();
+
+        // Browser Canvas Limit Check (Approx 30,000px is the limit for most browsers)
+        if (totalWidth > 25000) {
+            showToast('캔버스가 너무 길어 성능이 저하될 수 있습니다.');
+        }
+
         applyZoom(state.zoom);
         updatePreview();
         canvas.requestRenderAll();
@@ -218,24 +225,43 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${file.name}-${file.size}-${file.lastModified}`;
     }
 
-    async function optimizeImage(dataUrl, maxWidth = 2000) {
-        return new Promise((resolve) => {
+    async function optimizeImage(source, maxWidth = 1080) {
+        return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
-                const offCanvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
-                if (width > maxWidth) {
-                    height *= maxWidth / width;
-                    width = maxWidth;
+                try {
+                    const offCanvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > maxWidth) {
+                        height *= maxWidth / width;
+                        width = maxWidth;
+                    }
+                    offCanvas.width = width;
+                    offCanvas.height = height;
+                    const ctx = offCanvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Use toBlob instead of toDataURL for better memory efficiency
+                    offCanvas.toBlob((blob) => {
+                        const url = URL.createObjectURL(blob);
+                        // Immediate cleanup
+                        img.src = '';
+                        offCanvas.width = 0;
+                        offCanvas.height = 0;
+                        resolve(url);
+                    }, 'image/jpeg', 0.7);
+                } catch (err) {
+                    reject(err);
                 }
-                offCanvas.width = width;
-                offCanvas.height = height;
-                const ctx = offCanvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                resolve(offCanvas.toDataURL('image/jpeg', 0.85));
             };
-            img.src = dataUrl;
+            img.onerror = () => {
+                img.src = '';
+                reject(new Error("Image load failed"));
+            };
+            img.src = source;
         });
     }
 
@@ -403,82 +429,143 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Image Upload
     const imageUpload = document.getElementById('image-upload');
+    const uploadOverlay = document.getElementById('upload-overlay');
+    const uploadProgress = document.getElementById('upload-progress');
+
     if (imageUpload) {
         imageUpload.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
-            const imageDataList = [];
+            let files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            if (uploadOverlay) {
+                uploadOverlay.classList.add('show');
+                if (uploadProgress) uploadProgress.textContent = `준비 중... (0 / ${files.length})`;
+            }
+
+            const fileMetaList = [];
             let duplicateCount = 0;
 
-            for (const file of files) {
+            // 1. Metadata Gathering (Hash & Timestamp)
+            // We extract this first to sort images correctly before adding to canvas
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
                 const hash = await getFileHash(file);
+
                 if (state.uploadedFileHashes.has(hash)) {
                     duplicateCount++;
                     continue;
                 }
                 state.uploadedFileHashes.add(hash);
 
-                const data = await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = async (f) => {
-                        const optimizedSrc = await optimizeImage(f.target.result);
-                        const imgObj = new Image();
-                        imgObj.onload = () => {
-                            EXIF.getData(imgObj, function () {
+                let timestamp = file.lastModified;
+                try {
+                    // Robust EXIF extraction with timeout
+                    const exifTime = await new Promise((resolve) => {
+                        const timeout = setTimeout(() => {
+                            console.warn("EXIF timeout for:", file.name);
+                            resolve(null);
+                        }, 1000);
+
+                        EXIF.getData(file, function () {
+                            clearTimeout(timeout);
+                            try {
                                 const dateStr = EXIF.getTag(this, "DateTimeOriginal");
-                                const timestamp = dateStr ? new Date(dateStr.replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1/$2/$3")).getTime() : file.lastModified;
-                                resolve({ src: optimizedSrc, timestamp });
-                            });
-                        };
-                        imgObj.src = optimizedSrc;
-                    };
-                    reader.readAsDataURL(file);
-                });
-                imageDataList.push(data);
+                                if (dateStr) {
+                                    const normalizedDate = dateStr.replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1/$2/$3");
+                                    const parsed = new Date(normalizedDate).getTime();
+                                    resolve(isNaN(parsed) ? null : parsed);
+                                } else {
+                                    resolve(null);
+                                }
+                            } catch (e) {
+                                resolve(null);
+                            }
+                        });
+                    });
+                    if (exifTime) timestamp = exifTime;
+                } catch (e) {
+                    console.warn("EXIF failed for file:", file.name);
+                }
+
+                fileMetaList.push({ file, timestamp });
+                if (uploadProgress) uploadProgress.textContent = `정보 읽는 중... (${fileMetaList.length + duplicateCount} / ${files.length})`;
+
+                // Yield to UI thread frequently
+                if (i % 5 === 0) await new Promise(r => setTimeout(r, 10));
             }
+
+            // Clear the original files array to free memory
+            files = null;
+            imageUpload.value = '';
 
             if (duplicateCount > 0) {
                 showToast(`${duplicateCount}개의 중복된 이미지가 제외되었습니다.`);
             }
 
-            if (imageDataList.length === 0) return;
+            // Sort by timestamp (oldest first)
+            fileMetaList.sort((a, b) => a.timestamp - b.timestamp);
 
-            imageDataList.sort((a, b) => a.timestamp - b.timestamp);
+            // 2. Sequential Processing with aggressive memory management
+            for (let i = 0; i < fileMetaList.length; i++) {
+                const meta = fileMetaList[i];
+                if (uploadProgress) uploadProgress.textContent = `이미지 처리 중... (${i + 1} / ${fileMetaList.length})`;
 
-            for (let i = 0; i < imageDataList.length; i++) {
-                const data = imageDataList[i];
+                try {
+                    const objectUrl = URL.createObjectURL(meta.file);
+                    const optimizedUrl = await optimizeImage(objectUrl);
+                    URL.revokeObjectURL(objectUrl); // Revoke original immediately
 
-                fabric.Image.fromURL(data.src, (img) => {
-                    const scale = state.globalSize / Math.max(img.width, img.height);
-                    const pos = findBestPosition(img.width, img.height, scale);
+                    await new Promise((resolve) => {
+                        fabric.Image.fromURL(optimizedUrl, (img) => {
+                            const scale = state.globalSize / Math.max(img.width, img.height);
+                            const pos = findBestPosition(img.width, img.height, scale);
 
-                    img.set({
-                        left: pos.left,
-                        top: pos.top,
-                        scaleX: scale,
-                        scaleY: scale,
-                        cornerStyle: 'circle',
-                        cornerColor: '#0084ff',
-                        cornerStrokeColor: '#ffffff',
-                        transparentCorners: false,
-                        borderColor: '#0084ff',
-                        padding: 5,
-                        objectCaching: true,
-                        lockRotation: true
+                            img.set({
+                                left: pos.left,
+                                top: pos.top,
+                                scaleX: scale,
+                                scaleY: scale,
+                                cornerStyle: 'circle',
+                                cornerColor: '#0084ff',
+                                cornerStrokeColor: '#ffffff',
+                                transparentCorners: false,
+                                borderColor: '#0084ff',
+                                padding: 5,
+                                objectCaching: false, // Disable caching for mass uploads to save memory
+                                lockRotation: true
+                            });
+
+                            img.setControlsVisibility({ mt: false, mb: false, ml: false, mr: false, mtr: false });
+                            applyImageStyles(img);
+                            canvas.add(img);
+                            state.images.push(img);
+
+                            // Revoke optimized URL after it's loaded into Fabric
+                            URL.revokeObjectURL(optimizedUrl);
+
+                            // Every 5 images, render to show progress
+                            if (i % 5 === 0) canvas.requestRenderAll();
+
+                            // Allow browser to breathe and GC to run
+                            setTimeout(resolve, 50);
+                        });
                     });
 
-                    img.setControlsVisibility({ mt: false, mb: false, ml: false, mr: false, mtr: false });
-                    applyImageStyles(img);
-                    canvas.add(img);
-                    state.images.push(img);
-                    updateCanvasWidth();
-                    updateLines();
-                });
+                    // Clear file reference in meta list to help GC
+                    meta.file = null;
+                } catch (err) {
+                    console.error("Failed to process image:", meta.file?.name || "unknown", err);
+                }
             }
-            canvas.requestRenderAll();
-        });
-    }
 
-    // Border Thickness 제거됨 (Shadow로 대체)
+            if (uploadProgress) uploadProgress.textContent = `마무리 중...`;
+            updateCanvasWidth();
+            updateLines();
+            canvas.requestRenderAll();
+
+            if (uploadOverlay) uploadOverlay.classList.remove('show');
+        });
+    }    // Border Thickness 제거됨 (Shadow로 대체)
     // Global Size
     const globalSizeInput = document.getElementById('global-size');
     const globalSizeVal = document.getElementById('global-size-val');
